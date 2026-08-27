@@ -4,6 +4,8 @@ import numpy as np
 import pickle
 import plotly.express as px
 import plotly.graph_objects as go
+import os
+from knowledge.rag_engine import retrieve_chunks, ask_openrouter
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
@@ -50,10 +52,14 @@ st.sidebar.title("📡 Telecom Churn Advisor")
 st.sidebar.markdown("Internal CRM Dashboard")
 
 page = st.sidebar.radio(
-    "Navigation", 
-    ["📊 Overview & KPIs", "🎯 Retention Action List", "👤 Customer Profile & Simulation"]
+    "Navigation",
+    [
+        "📊 Overview & KPIs",
+        "🎯 Retention Action List",
+        "👤 Customer Profile & Simulation",
+        "🤖 AI Retention Advisor"
+    ]
 )
-
 # --- PAGE 1: OVERVIEW & KPIs ---
 if page == "📊 Overview & KPIs":
     st.title("📊 Business Overview & KPIs")
@@ -186,3 +192,196 @@ elif page == "👤 Customer Profile & Simulation":
                 st.success(f"✅ This offer successfully reduces the churn risk by {abs(prob_diff)*100:.1f}%.")
             else:
                 st.warning("⚠️ This offer does not significantly reduce the churn risk.")
+# --- PAGE 4: AI RETENTION ADVISOR ---
+elif page == "🤖 AI Retention Advisor":
+
+    st.title("🤖 AI Retention Advisor")
+
+    st.markdown(
+        "Ask the AI advisor about customer retention strategies, "
+        "churn risk, contracts, discounts, and recommended actions."
+    )
+
+    st.markdown("---")
+
+    question = st.text_area(
+        "💬 Ask your question",
+        placeholder=(
+            "Example: What strategy should we use for a "
+            "high-risk month-to-month customer?"
+        ),
+        height=120
+    )
+
+    if st.button("🚀 Ask AI Advisor"):
+
+        if not question.strip():
+            st.warning("Please enter a question first.")
+
+        else:
+
+            # OpenRouter API key
+            try:
+                api_key = st.secrets.get("OPENROUTER_API_KEY")
+            except Exception:
+                api_key = None
+
+            if not api_key:
+                api_key = os.getenv("OPENROUTER_API_KEY")
+
+            if not api_key:
+                st.error(
+                    "OPENROUTER_API_KEY belum tersedia. "
+                    "Tambahkan API key melalui Streamlit Secrets."
+                )
+
+            else:
+
+                # ------------------------------------------------
+                # RAG ROUTER
+                # ------------------------------------------------
+
+                rag_keywords = [
+                    "retention",
+                    "retain",
+                    "churn",
+                    "contract",
+                    "discount",
+                    "customer",
+                    "fiber",
+                    "internet",
+                    "month-to-month",
+                    "one year",
+                    "two year",
+                    "strategy",
+                    "offer",
+                    "risk",
+                    "customer service"
+                ]
+
+                question_lower = question.lower()
+
+                needs_rag = any(
+                    keyword in question_lower
+                    for keyword in rag_keywords
+                )
+
+                retrieved_chunks = []
+
+                if needs_rag:
+                    retrieved_chunks = retrieve_chunks(
+                        question,
+                        top_k=3
+                    )
+
+                context = "\n\n".join(
+                    chunk["text"]
+                    for chunk in retrieved_chunks
+                )
+
+                # ------------------------------------------------
+                # CALL LLM
+                # ------------------------------------------------
+
+                with st.spinner("🤖 AI sedang menganalisis..."):
+
+                    try:
+
+                        result = ask_openrouter(
+                            question=question,
+                            context=context,
+                            model="openai/gpt-4o-mini",
+                            api_key=api_key
+                        )
+
+                        # ------------------------------------------------
+                        # RESULT
+                        # ------------------------------------------------
+
+                        st.markdown("### 💡 AI Recommendation")
+
+                        st.success(result["answer"])
+
+                        st.markdown("---")
+
+                        st.markdown("### 🔎 AI Execution Details")
+
+                        col1, col2, col3 = st.columns(3)
+
+                        col1.metric(
+                            "RAG Used",
+                            "Yes" if needs_rag else "No"
+                        )
+
+                        col2.metric(
+                            "Chunks Retrieved",
+                            len(retrieved_chunks)
+                        )
+
+                        col3.metric(
+                            "Model Used",
+                            result["model"]
+                        )
+
+                        # ------------------------------------------------
+                        # TOKEN USAGE
+                        # ------------------------------------------------
+
+                        usage = result.get("usage", {})
+
+                        if usage:
+
+                            st.markdown("### 🪙 Token Usage")
+
+                            token_col1, token_col2, token_col3 = st.columns(3)
+
+                            token_col1.metric(
+                                "Prompt Tokens",
+                                usage.get("prompt_tokens", 0)
+                            )
+
+                            token_col2.metric(
+                                "Completion Tokens",
+                                usage.get("completion_tokens", 0)
+                            )
+
+                            token_col3.metric(
+                                "Total Tokens",
+                                usage.get("total_tokens", 0)
+                            )
+
+                        # ------------------------------------------------
+                        # SOURCES
+                        # ------------------------------------------------
+
+                        if retrieved_chunks:
+
+                            st.markdown("### 📚 Retrieved Knowledge")
+
+                            for i, chunk in enumerate(
+                                retrieved_chunks,
+                                start=1
+                            ):
+
+                                with st.expander(
+                                    f"Knowledge Chunk {i}"
+                                ):
+
+                                    st.write(chunk["text"])
+
+                                    st.caption(
+                                        f"Relevance score: {chunk['score']}"
+                                    )
+
+                        else:
+
+                            st.info(
+                                "ℹ️ RAG tidak digunakan karena "
+                                "pertanyaan tidak membutuhkan knowledge base."
+                            )
+
+                    except Exception as e:
+
+                        st.error(
+                            f"Terjadi error saat menghubungi AI: {e}"
+                        )
