@@ -1,0 +1,83 @@
+TELECOM CUSTOMER RETENTION KNOWLEDGE BASE
+
+1. MONTH-TO-MONTH CONTRACT
+
+Customers with month-to-month contracts generally have higher churn risk because they have greater flexibility to leave the service.
+
+Recommended retention strategies:
+- Offer a one-year contract with an appropriate discount.
+- Explain the benefits of a longer contract.
+- Provide personalized retention offers.
+- Consider a temporary monthly credit for high-risk customers.
+
+2. FIBER OPTIC CUSTOMERS
+
+Fiber optic customers can have high monthly charges and may require additional technical support.
+
+Recommended retention strategies:
+- Offer free technical support.
+- Check whether the customer is experiencing connection problems.
+- Provide service-quality assistance.
+- Consider a loyalty discount for high-risk customers.
+
+3. HIGH CHURN RISK
+
+A customer with a high predicted churn probability should receive attention from the retention team.
+
+Recommended actions:
+- Contact the customer proactively.
+- Review the customer's contract type.
+- Review monthly charges.
+- Identify service-related problems.
+- Offer a targeted retention package.
+
+4. MEDIUM CHURN RISK
+
+Medium-risk customers should be monitored and may receive preventive retention offers.
+
+Recommended actions:
+- Monitor changes in customer behavior.
+- Provide personalized communication.
+- Consider a moderate discount.
+- Encourage longer-term contracts.
+
+5. LOW CHURN RISK
+
+Low-risk customers generally do not require aggressive retention offers.
+
+Recommended actions:
+- Maintain good service quality.
+- Continue normal customer engagement.
+- Avoid unnecessary discounts.
+
+6. RETENTION OFFER PRINCIPLES
+
+Retention offers should be targeted rather than automatically applied to every customer.
+
+The retention team should consider:
+- Churn probability.
+- Contract type.
+- Monthly charges.
+- Internet service.
+- Customer tenure.
+- Available retention budget.
+
+The goal is to reduce churn while avoiding unnecessary discounts for customers who are unlikely to leave.
+
+7. CONTRACT STRATEGY
+
+A one-year contract can be considered for customers currently using month-to-month contracts.
+
+A two-year contract can provide stronger long-term retention but may require a larger incentive.
+
+The appropriate offer should depend on the customer's predicted risk and current characteristics.
+
+8. AI ADVISOR
+
+The AI advisor should provide recommendations based on the customer's churn prediction and the retention knowledge base.
+
+The AI should not invent company policies that are not present in the knowledge base.
+
+When the user's question does not require the knowledge base, the system should avoid unnecessary retrieval to reduce token usage.
+
+When the question requires retention strategy information, the system should retrieve only the most relevant knowledge chunks.
