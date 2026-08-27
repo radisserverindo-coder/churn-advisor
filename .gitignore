@@ -1,3 +1,5 @@
 .streamlit/
 __pycache__/
 *.pyc
+.env
+mlruns/

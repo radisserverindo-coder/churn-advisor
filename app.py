@@ -4,6 +4,7 @@ import numpy as np
 import pickle
 import plotly.express as px
 import plotly.graph_objects as go
+import re
 import os
 from knowledge.rag_engine import retrieve_chunks, ask_openrouter
 
@@ -46,6 +47,35 @@ X_active = df_active.drop(columns=['customerID', 'Churn'])
 probabilities = model.predict_proba(X_active)[:, 1] # Probability of Churn (Class 1)
 df_active['Churn Probability'] = probabilities
 df_active['Risk Level'] = pd.cut(df_active['Churn Probability'], bins=[0, 0.3, 0.7, 1.0], labels=['Low', 'Medium', 'High'])
+
+# ============================================================
+# PROMPT INJECTION DEFENSE
+# ============================================================
+
+PROMPT_INJECTION_PATTERNS = [
+    r"ignore\s+(all\s+)?previous\s+instructions",
+    r"ignore\s+(all\s+)?prior\s+instructions",
+    r"forget\s+(all\s+)?previous\s+instructions",
+    r"disregard\s+(all\s+)?instructions",
+    r"reveal\s+(the\s+)?system\s+prompt",
+    r"show\s+(me\s+)?(the\s+)?system\s+prompt",
+    r"reveal\s+(the\s+)?api\s+key",
+    r"show\s+(me\s+)?(the\s+)?api\s+key",
+    r"print\s+(the\s+)?api\s+key",
+    r"reveal\s+(secret|secrets)",
+    r"show\s+(secret|secrets)",
+]
+
+
+def is_prompt_injection(text):
+    """Detect common prompt injection attempts."""
+    text_lower = text.lower()
+
+    for pattern in PROMPT_INJECTION_PATTERNS:
+        if re.search(pattern, text_lower):
+            return True
+
+    return False
 
 # --- SIDEBAR ---
 st.sidebar.title("📡 Telecom Churn Advisor")
@@ -218,8 +248,19 @@ elif page == "🤖 AI Retention Advisor":
         if not question.strip():
             st.warning("Please enter a question first.")
 
-        else:
+        elif is_prompt_injection(question):
+            st.error(
+                "🛡️ Prompt injection detected. "
+                "The request was blocked because it attempts "
+                "to override instructions or access protected information."
+            )
 
+            st.info(
+                "Please ask a question related to customer churn, "
+                "retention, contracts, discounts, or customer strategy."
+            )
+
+        else:
             # OpenRouter API key
             try:
                 api_key = st.secrets.get("OPENROUTER_API_KEY")
@@ -236,7 +277,6 @@ elif page == "🤖 AI Retention Advisor":
                 )
 
             else:
-
                 # ------------------------------------------------
                 # RAG ROUTER
                 # ------------------------------------------------
@@ -284,9 +324,7 @@ elif page == "🤖 AI Retention Advisor":
                 # ------------------------------------------------
 
                 with st.spinner("🤖 AI sedang menganalisis..."):
-
                     try:
-
                         result = ask_openrouter(
                             question=question,
                             context=context,
@@ -299,11 +337,9 @@ elif page == "🤖 AI Retention Advisor":
                         # ------------------------------------------------
 
                         st.markdown("### 💡 AI Recommendation")
-
                         st.success(result["answer"])
 
                         st.markdown("---")
-
                         st.markdown("### 🔎 AI Execution Details")
 
                         col1, col2, col3 = st.columns(3)
@@ -330,7 +366,6 @@ elif page == "🤖 AI Retention Advisor":
                         usage = result.get("usage", {})
 
                         if usage:
-
                             st.markdown("### 🪙 Token Usage")
 
                             token_col1, token_col2, token_col3 = st.columns(3)
@@ -355,33 +390,27 @@ elif page == "🤖 AI Retention Advisor":
                         # ------------------------------------------------
 
                         if retrieved_chunks:
-
                             st.markdown("### 📚 Retrieved Knowledge")
 
                             for i, chunk in enumerate(
                                 retrieved_chunks,
                                 start=1
                             ):
-
                                 with st.expander(
                                     f"Knowledge Chunk {i}"
                                 ):
-
                                     st.write(chunk["text"])
-
                                     st.caption(
                                         f"Relevance score: {chunk['score']}"
                                     )
-
                         else:
-
                             st.info(
                                 "ℹ️ RAG tidak digunakan karena "
                                 "pertanyaan tidak membutuhkan knowledge base."
                             )
 
                     except Exception as e:
-
                         st.error(
                             f"Terjadi error saat menghubungi AI: {e}"
                         )
+

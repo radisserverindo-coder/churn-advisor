@@ -1,0 +1,9 @@
+services:
+  churn-advisor:
+    build: .
+    container_name: churn-advisor
+    ports:
+      - "8501:8501"
+    environment:
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+    restart: unless-stopped
