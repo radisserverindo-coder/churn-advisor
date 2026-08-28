@@ -1,14 +1,16 @@
 import os
 import pickle
-
 import mlflow
 import mlflow.sklearn
-import numpy as np
 import pandas as pd
+import numpy as np
 
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import (
     accuracy_score,
     precision_score,
@@ -16,35 +18,26 @@ from sklearn.metrics import (
     f1_score,
     roc_auc_score,
 )
-from sklearn.model_selection import train_test_split
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
 
-
-# ============================================================
-# CONFIGURATION
-# ============================================================
 
 DATA_FILE = "Telco-Customer-Churn.csv"
 MODEL_FILE = "churn_model.pkl"
-MLFLOW_DB = "sqlite:///mlflow.db"
-EXPERIMENT_NAME = "Telecom Churn Advisor"
 
+EXPERIMENT_NAME = "Telecom Churn Model Selection"
+REGISTERED_MODEL_NAME = "TelecomChurnAdvisorBestModel"
 
-# ============================================================
-# DATA LOADING & PREPROCESSING
-# ============================================================
 
 def load_and_preprocess_data(filepath=DATA_FILE):
+    print("Loading data...")
+
     df = pd.read_csv(filepath)
 
-    # Convert TotalCharges to numeric
+    # Clean TotalCharges
     df["TotalCharges"] = pd.to_numeric(
         df["TotalCharges"].replace(" ", np.nan),
         errors="coerce",
     )
 
-    # Fill missing values
     df["TotalCharges"] = df["TotalCharges"].fillna(0)
 
     # Convert target
@@ -56,19 +49,12 @@ def load_and_preprocess_data(filepath=DATA_FILE):
     return df
 
 
-# ============================================================
-# PIPELINE
-# ============================================================
-
-def build_pipeline(model):
+def build_preprocessor(X):
     num_cols = [
         "tenure",
         "MonthlyCharges",
         "TotalCharges",
     ]
-
-    df = load_and_preprocess_data()
-    X = df.drop(columns=["customerID", "Churn"])
 
     cat_cols = [
         col for col in X.columns
@@ -96,35 +82,19 @@ def build_pipeline(model):
         ]
     )
 
-    clf = Pipeline(
-        steps=[
-            (
-                "preprocessor",
-                preprocessor,
-            ),
-            (
-                "classifier",
-                model,
-            ),
-        ]
-    )
+    return preprocessor
 
-    return clf
-
-
-# ============================================================
-# EVALUATION
-# ============================================================
 
 def evaluate_model(model, X_test, y_test):
     y_pred = model.predict(X_test)
-    y_prob = model.predict_proba(X_test)[:, 1]
+
+    if hasattr(model, "predict_proba"):
+        y_prob = model.predict_proba(X_test)[:, 1]
+    else:
+        y_prob = None
 
     metrics = {
-        "accuracy": accuracy_score(
-            y_test,
-            y_pred,
-        ),
+        "accuracy": accuracy_score(y_test, y_pred),
         "precision": precision_score(
             y_test,
             y_pred,
@@ -140,30 +110,20 @@ def evaluate_model(model, X_test, y_test):
             y_pred,
             zero_division=0,
         ),
-        "roc_auc": roc_auc_score(
+    }
+
+    if y_prob is not None:
+        metrics["roc_auc"] = roc_auc_score(
             y_test,
             y_prob,
-        ),
-    }
+        )
+    else:
+        metrics["roc_auc"] = 0.0
 
     return metrics
 
 
-# ============================================================
-# TRAINING
-# ============================================================
-
 def train_model():
-
-    print("=" * 60)
-    print("TELECOM CHURN ADVISOR - MODEL TRAINING")
-    print("=" * 60)
-
-    # --------------------------------------------------------
-    # Load data
-    # --------------------------------------------------------
-
-    print("\n[1/5] Loading data...")
 
     df = load_and_preprocess_data()
 
@@ -176,118 +136,91 @@ def train_model():
     X_train, X_test, y_train, y_test = train_test_split(
         X,
         y,
-        test_size=0.20,
+        test_size=0.2,
         random_state=42,
         stratify=y,
     )
 
-    print(f"Total data : {len(df)}")
-    print(f"Train data : {len(X_train)}")
-    print(f"Test data  : {len(X_test)}")
+    preprocessor = build_preprocessor(X)
 
-    # --------------------------------------------------------
-    # MLflow setup
-    # --------------------------------------------------------
+    models = {
+        "Logistic Regression": LogisticRegression(
+            max_iter=1000,
+            class_weight="balanced",
+            random_state=42,
+        ),
 
-    print("\n[2/5] Starting MLflow...")
+        "Random Forest 100": RandomForestClassifier(
+            n_estimators=100,
+            random_state=42,
+            class_weight="balanced",
+        ),
 
-    mlflow.set_tracking_uri(MLFLOW_DB)
+        "Random Forest 200": RandomForestClassifier(
+            n_estimators=200,
+            random_state=42,
+            class_weight="balanced",
+        ),
+    }
+
+    # MLflow configuration
+    mlflow.set_tracking_uri(
+        "sqlite:///mlflow.db"
+    )
 
     mlflow.set_experiment(
         EXPERIMENT_NAME
     )
 
-    # --------------------------------------------------------
-    # Define experiments
-    # --------------------------------------------------------
+    best_model = None
+    best_metrics = None
+    best_model_name = None
 
-    experiments = [
-        {
-            "name": "Logistic Regression",
-            "model": LogisticRegression(
-                max_iter=1000,
-                class_weight="balanced",
-                random_state=42,
-            ),
-            "params": {
-                "model_type": "LogisticRegression",
-                "max_iter": 1000,
-                "class_weight": "balanced",
-            },
-        },
-        {
-            "name": "Random Forest 100",
-            "model": RandomForestClassifier(
-                n_estimators=100,
-                random_state=42,
-                class_weight="balanced",
-                max_depth=None,
-            ),
-            "params": {
-                "model_type": "RandomForest",
-                "n_estimators": 100,
-                "max_depth": "None",
-                "class_weight": "balanced",
-            },
-        },
-        {
-            "name": "Random Forest 200",
-            "model": RandomForestClassifier(
-                n_estimators=200,
-                random_state=42,
-                class_weight="balanced",
-                max_depth=None,
-            ),
-            "params": {
-                "model_type": "RandomForest",
-                "n_estimators": 200,
-                "max_depth": "None",
-                "class_weight": "balanced",
-            },
-        },
-    ]
+    print("\nStarting MLflow experiments...\n")
 
-    results = []
-
-    # --------------------------------------------------------
-    # Run multiple experiments
-    # --------------------------------------------------------
-
-    print("\n[3/5] Running experiments...")
-
-    for experiment in experiments:
+    for model_name, model in models.items():
 
         print(
-            f"\nTraining: {experiment['name']}"
+            f"Training {model_name}..."
+        )
+
+        pipeline = Pipeline(
+            steps=[
+                (
+                    "preprocessor",
+                    preprocessor,
+                ),
+                (
+                    "classifier",
+                    model,
+                ),
+            ]
         )
 
         with mlflow.start_run(
-            run_name=experiment["name"]
-        ) as run:
+            run_name=model_name
+        ):
 
-            clf = build_pipeline(
-                experiment["model"]
-            )
-
-            clf.fit(
+            pipeline.fit(
                 X_train,
                 y_train,
             )
 
             metrics = evaluate_model(
-                clf,
+                pipeline,
                 X_test,
                 y_test,
             )
 
-            # Log parameters
-            mlflow.log_params(
-                experiment["params"]
+            # Log common parameters
+            mlflow.log_param(
+                "model",
+                model_name,
             )
 
             mlflow.log_param(
                 "test_size",
-                0.20,
+                0.2,
             )
 
             mlflow.log_param(
@@ -295,119 +228,177 @@ def train_model():
                 42,
             )
 
+            mlflow.log_param(
+                "class_weight",
+                "balanced",
+            )
+
+            # Log model-specific parameters
+            if model_name.startswith(
+                "Random Forest"
+            ):
+                mlflow.log_param(
+                    "n_estimators",
+                    model.n_estimators,
+                )
+
+            if model_name == "Logistic Regression":
+                mlflow.log_param(
+                    "max_iter",
+                    model.max_iter,
+                )
+
             # Log metrics
-            mlflow.log_metrics(
-                metrics
+            mlflow.log_metric(
+                "accuracy",
+                metrics["accuracy"],
+            )
+
+            mlflow.log_metric(
+                "precision",
+                metrics["precision"],
+            )
+
+            mlflow.log_metric(
+                "recall",
+                metrics["recall"],
+            )
+
+            mlflow.log_metric(
+                "f1_score",
+                metrics["f1_score"],
+            )
+
+            mlflow.log_metric(
+                "roc_auc",
+                metrics["roc_auc"],
             )
 
             # Log model artifact
             mlflow.sklearn.log_model(
-                clf,
-                "model",
-            )
-
-            results.append(
-                {
-                    "run_id": run.info.run_id,
-                    "name": experiment["name"],
-                    "model": clf,
-                    **metrics,
-                }
+                pipeline,
+                artifact_path="model",
             )
 
             print(
                 f"Accuracy : {metrics['accuracy']:.4f}"
             )
+
             print(
                 f"Precision: {metrics['precision']:.4f}"
             )
+
             print(
                 f"Recall   : {metrics['recall']:.4f}"
             )
+
             print(
                 f"F1 Score : {metrics['f1_score']:.4f}"
             )
+
             print(
-                f"ROC AUC  : {metrics['roc_auc']:.4f}"
+                f"ROC-AUC  : {metrics['roc_auc']:.4f}"
             )
 
-    # --------------------------------------------------------
-    # Select best model
-    # --------------------------------------------------------
+            print()
 
-    print("\n[4/5] Selecting best model...")
+            # Select best model based on F1
+            if (
+                best_metrics is None
+                or metrics["f1_score"]
+                > best_metrics["f1_score"]
+            ):
+                best_model = pipeline
+                best_metrics = metrics
+                best_model_name = model_name
 
-    best_result = max(
-        results,
-        key=lambda x: x["f1_score"],
-    )
-
+    # Save best model locally
     print(
-        f"\nBEST MODEL: {best_result['name']}"
+        f"Best model: {best_model_name}"
     )
-
-    print(
-        f"Best F1 Score: "
-        f"{best_result['f1_score']:.4f}"
-    )
-
-    # --------------------------------------------------------
-    # Register best model
-    # --------------------------------------------------------
-
-    print("\n[5/5] Registering best model...")
-
-    model_name = "TelecomChurnAdvisorBestModel"
-
-    model_uri = (
-        f"runs:/{best_result['run_id']}/model"
-    )
-
-    try:
-        registered_model = mlflow.register_model(
-            model_uri=model_uri,
-            name=model_name,
-        )
-
-        print(
-            f"Registered model: {model_name}"
-        )
-
-        print(
-            f"Version: "
-            f"{registered_model.version}"
-        )
-
-    except Exception as e:
-
-        print(
-            "Model registration warning:"
-        )
-
-        print(e)
-
-    # --------------------------------------------------------
-    # Save best model for Streamlit
-    # --------------------------------------------------------
 
     with open(
         MODEL_FILE,
         "wb",
     ) as f:
-
         pickle.dump(
-            best_result["model"],
+            best_model,
             f,
         )
 
     print(
-        f"\nBest model saved to "
-        f"{MODEL_FILE}"
+        f"Best model saved to {MODEL_FILE}"
     )
 
-    print("\n" + "=" * 60)
-    print("TRAINING COMPLETED")
-    print("=" * 60)
+    # Register best model in MLflow
+    with mlflow.start_run(
+        run_name="Best Model Registration"
+    ) as run:
+
+        mlflow.log_param(
+            "selected_model",
+            best_model_name,
+        )
+
+        mlflow.log_param(
+            "selection_metric",
+            "f1_score",
+        )
+
+        mlflow.log_metric(
+            "accuracy",
+            best_metrics["accuracy"],
+        )
+
+        mlflow.log_metric(
+            "precision",
+            best_metrics["precision"],
+        )
+
+        mlflow.log_metric(
+            "recall",
+            best_metrics["recall"],
+        )
+
+        mlflow.log_metric(
+            "f1_score",
+            best_metrics["f1_score"],
+        )
+
+        mlflow.log_metric(
+            "roc_auc",
+            best_metrics["roc_auc"],
+        )
+
+        mlflow.sklearn.log_model(
+            best_model,
+            artifact_path="best_model",
+            registered_model_name=REGISTERED_MODEL_NAME,
+        )
+
+    print(
+        "\n=================================="
+    )
+
+    print(
+        "MLFLOW TRAINING COMPLETED"
+    )
+
+    print(
+        f"Best Model : {best_model_name}"
+    )
+
+    print(
+        f"F1 Score   : {best_metrics['f1_score']:.4f}"
+    )
+
+    print(
+        f"Registered : {REGISTERED_MODEL_NAME}"
+    )
+
+    print(
+        "=================================="
+    )
 
 
 if __name__ == "__main__":
