@@ -136,6 +136,23 @@ if page == "📊 Overview & KPIs":
                   hole=0.4)
     st.plotly_chart(fig3, use_container_width=True)
 
+    # --- CHURN PREDICTION MODEL ---
+    st.markdown("### 🎯 Churn Prediction Model")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.metric("Best Model", "Logistic Regression")
+
+    with col2:
+        st.metric("F1 Score", "0.6136")
+
+    with col3:
+        st.metric("ROC-AUC", "0.8242")
+
+
+# --- PAGE 2: RETENTION ACTION LIST ---
+
 # --- PAGE 2: RETENTION ACTION LIST ---
 elif page == "🎯 Retention Action List":
     st.title("🎯 Retention Action List")
